@@ -40,6 +40,10 @@ from constants import (
     UI_INPUTS,
     UI_OUTPUTS,
     UI_SHOW_API,
+    INTRO_MUSIC_PATH,
+    INTRO_MUSIC_DURATION,
+    MUSIC_VOLUME_REDUCTION,
+    FADE_OUT_DURATION,
 )
 from prompts import (
     LANGUAGE_MODIFIER,
@@ -125,6 +129,15 @@ def generate_podcast(
     transcript = ""
     total_characters = 0
 
+    # 添加开场音乐
+    intro_music = AudioSegment.from_file(INTRO_MUSIC_PATH)[:INTRO_MUSIC_DURATION]  # 使用配置的时长
+    intro_music = intro_music - MUSIC_VOLUME_REDUCTION  # 降低音量
+    intro_music = intro_music.fade_out(duration=FADE_OUT_DURATION)  # 淡出效果
+    
+    # 创建最终的音频列表，以开场音乐开始
+    final_audio_segments = [intro_music]
+    
+    # 处理对话片段
     for line in llm_output.dialogue:
         logger.info(f"Generating audio for {line.speaker}: {line.text}")
         if line.speaker == "Host (Jane)":
@@ -145,10 +158,10 @@ def generate_podcast(
         )
         # Read the audio file into an AudioSegment
         audio_segment = AudioSegment.from_file(audio_file_path)
-        audio_segments.append(audio_segment)
+        final_audio_segments.append(audio_segment)
 
-    # Concatenate all audio segments
-    combined_audio = sum(audio_segments)
+    # 合并所有音频片段
+    combined_audio = sum(final_audio_segments)
 
     # Export the combined audio to a temporary file
     temporary_directory = GRADIO_CACHE_DIR

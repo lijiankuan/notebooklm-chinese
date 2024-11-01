@@ -5,15 +5,19 @@ Functions:
 - generate_script: Get the dialogue from the LLM.
 - call_llm: Call the LLM with the given prompt and dialogue format.
 - parse_url: Parse the given URL and return the text content.
-- generate_podcast_audio: Generate audio for podcast using TTS or advanced audio models.
+- generate_podcast_audio: Generate audio for podcast using Azure TTS or advanced audio models.
 - _use_suno_model: Generate advanced audio using Bark.
-- _use_melotts_api: Generate audio using TTS model.
+- _use_azure_tts: Generate audio using Azure Speech API.
 - _get_melo_tts_params: Get TTS parameters based on speaker and language.
 """
 
 # Standard library imports
 import time
 from typing import Any, Union
+from tempfile import NamedTemporaryFile
+import json
+import os
+import logging
 
 # Third-party imports
 import instructor
@@ -22,9 +26,11 @@ from bark import SAMPLE_RATE, generate_audio, preload_models
 from fireworks.client import Fireworks
 from gradio_client import Client
 from scipy.io.wavfile import write as write_wav
+import azure.cognitiveservices.speech as speechsdk
 
 # Local imports
 from constants import (
+    DEFAULT_AZURE_VOICES,
     FIREWORKS_API_KEY,
     FIREWORKS_MODEL_ID,
     FIREWORKS_MAX_TOKENS,
@@ -36,6 +42,9 @@ from constants import (
     JINA_READER_URL,
     JINA_RETRY_ATTEMPTS,
     JINA_RETRY_DELAY,
+    AZURE_SPEECH_KEY,
+    AZURE_SPEECH_REGION,
+    AZURE_SPEECH_VOICES,
 )
 from schema import ShortDialogue, MediumDialogue
 
@@ -49,6 +58,8 @@ hf_client = Client(MELO_TTS_SPACES_ID)
 # Download and load all models for Bark
 preload_models()
 
+# 在其他初始化代码之前添加
+logger = logging.getLogger(__name__)
 
 def generate_script(
     system_prompt: str,
@@ -102,9 +113,9 @@ def parse_url(url: str) -> str:
 def generate_podcast_audio(
     text: str, speaker: str, language: str, use_advanced_audio: bool, random_voice_number: int
 ) -> str:
-    """Generate audio for podcast using TTS or advanced audio models."""
+    """Generate audio for podcast using Melo TTS or advanced Azure Speech API."""
     if use_advanced_audio:
-        return _use_suno_model(text, speaker, language, random_voice_number)
+        return _use_azure_tts(text, speaker, language)
     else:
         return _use_melotts_api(text, speaker, language)
 
@@ -139,6 +150,44 @@ def _use_melotts_api(text: str, speaker: str, language: str) -> str:
             if attempt == MELO_RETRY_ATTEMPTS - 1:  # Last attempt
                 raise  # Re-raise the last exception if all attempts fail
             time.sleep(MELO_RETRY_DELAY)  # Wait for X second before retrying
+
+
+def _use_azure_tts(text: str, speaker: str, language: str) -> str:
+    """Generate audio using Azure Speech API."""
+    # 使用环境变量或默认值
+    azure_voices = json.loads(os.getenv('AZURE_SPEECH_VOICES', 'null')) or DEFAULT_AZURE_VOICES
+    try:
+        voice_name = azure_voices[language][speaker]
+    except (KeyError, TypeError):
+        logger.warning(f"Voice not found for {language}/{speaker}, using default")
+        voice_name = DEFAULT_AZURE_VOICES[language][speaker]
+    
+    # 配置 speech config
+    speech_config = speechsdk.SpeechConfig(
+        subscription=AZURE_SPEECH_KEY, 
+        region=AZURE_SPEECH_REGION
+    )
+    
+    # 获取对应的voice
+    speech_config.speech_synthesis_voice_name = voice_name
+
+    # 创建临时文件
+    temp_file = NamedTemporaryFile(suffix=".mp3", delete=False)
+    audio_config = speechsdk.audio.AudioOutputConfig(filename=temp_file.name)
+    
+    # 创建synthesizer
+    speech_synthesizer = speechsdk.SpeechSynthesizer(
+        speech_config=speech_config, 
+        audio_config=audio_config
+    )
+
+    # 生成语音
+    result = speech_synthesizer.speak_text_async(text).get()
+    
+    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+        return temp_file.name
+    else:
+        raise Exception(f"Speech synthesis failed: {result.reason}")
 
 
 def _get_melo_tts_params(speaker: str, language: str) -> tuple[str, float]:

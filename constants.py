@@ -108,15 +108,15 @@ UI_INPUTS = {
     "length": {
         "label": "5. ⏱️ Choose the length",
         "choices": ["Short (1-2 min)", "Medium (3-5 min)"],
-        "value": "Medium (3-5 min)",
+        "value": "Short (1-2 min)",
     },
     "language": {
         "label": "6. 🌐 Choose the language",
         "choices": UI_AVAILABLE_LANGUAGES,
-        "value": "English",
+        "value": "Chinese",
     },
     "advanced_audio": {
-        "label": "7. 🔄 Use advanced audio generation? (Experimental)",
+        "label": "7. 🔄 Use advanced audio generation? (Azure TTS)",
         "value": True,
     },
 }
@@ -160,3 +160,21 @@ UI_EXAMPLES = [
 ]
 UI_CACHE_EXAMPLES = True
 UI_SHOW_API = True
+
+AZURE_SPEECH_KEY = os.getenv('AZURE_SPEECH_KEY')
+AZURE_SPEECH_REGION = os.getenv('AZURE_SPEECH_REGION')
+AZURE_SPEECH_VOICES = os.getenv('AZURE_SPEECH_VOICES')
+
+# 添加默认的语音配置
+DEFAULT_AZURE_VOICES = {
+    "zh": {
+        "Guest": "zh-CN-YunjianNeural",
+        "Host (Jane)": "zh-CN-XiaochenMultilingualNeural"
+    }
+}
+
+# 音频相关配置
+INTRO_MUSIC_PATH = "assets/intro.mp3"
+INTRO_MUSIC_DURATION = 5000  # 开场音乐时长（毫秒）
+MUSIC_VOLUME_REDUCTION = 3  # 降低音量的分贝数
+FADE_OUT_DURATION = 2000  # 淡出时长（毫秒）
